@@ -9,9 +9,9 @@ vendors:
   # Update the repo URL to match your PAI fork/repo
   # ============================================
   pai:
-    repo: "https://github.com/YOURUSER/pai.git"
+    repo: "https://github.com/danielmiessler/Personal_AI_Infrastructure.git"
     branch: "main"
-    description: "Personal AI Infrastructure - includes Fabric patterns"
+    description: "Daniel Miessler's Personal AI Infrastructure"
     enabled: true
     # What to integrate from PAI
     integrations:
