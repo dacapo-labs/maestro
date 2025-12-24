@@ -89,8 +89,8 @@ skill::list() {
 # ============================================
 #
 # Strategy for provider-agnostic AI calls:
-# 1. Use 'llm' tool if available (supports 20+ providers via plugins)
-# 2. Fall back to provider-specific CLI with proper flags
+# 1. Use native CLI first (claude, ollama, openai, etc.)
+# 2. Fall back to 'llm' tool if native CLI unavailable
 # 3. Use direct API calls as last resort
 #
 # This ensures skills work with ANY AI provider, not just Claude.
@@ -113,43 +113,30 @@ skill::_json_escape() {
 
 # Single-shot AI call (for light AI skills)
 # Uses the fastest/cheapest model appropriate
+# Priority: native CLI -> llm tool -> direct API
 skill::ai_oneshot() {
     local prompt="$1"
     local provider="${2:-$(maestro::config 'ai.default_fast_provider' 'ollama')}"
 
-    # Prefer 'llm' tool - it's provider-agnostic and handles auth
-    if skill::_has_llm && [[ "$provider" != "ollama" ]]; then
-        # llm can use any configured model
-        case "$provider" in
-            claude|anthropic)
-                echo "$prompt" | llm -m claude-3-5-haiku-latest 2>/dev/null
-                ;;
-            openai|chatgpt|gpt)
-                echo "$prompt" | llm -m gpt-4o-mini 2>/dev/null
-                ;;
-            gemini|google)
-                echo "$prompt" | llm -m gemini-1.5-flash 2>/dev/null
-                ;;
-            *)
-                # Use llm's default model
-                echo "$prompt" | llm 2>/dev/null
-                ;;
-        esac
-        return
-    fi
-
-    # Provider-specific fallbacks
     case "$provider" in
         ollama)
             local model=$(maestro::config 'ai.ollama.default_model' 'llama3.2')
-            echo "$prompt" | ollama run "$model" 2>/dev/null
+            if command -v ollama &>/dev/null; then
+                echo "$prompt" | ollama run "$model" 2>/dev/null
+            else
+                cli::error "Ollama not installed"
+                return 1
+            fi
             ;;
         claude|anthropic)
+            # 1. Try Claude CLI
             if command -v claude &>/dev/null; then
-                # Claude Code CLI
                 echo "$prompt" | claude --print 2>/dev/null
+            # 2. Try llm tool
+            elif skill::_has_llm; then
+                echo "$prompt" | llm -m claude-3-5-haiku-latest 2>/dev/null
+            # 3. Direct API
             elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
-                # Direct API call
                 local escaped_prompt=$(skill::_json_escape "$prompt")
                 curl -s https://api.anthropic.com/v1/messages \
                     -H "Content-Type: application/json" \
@@ -158,16 +145,19 @@ skill::ai_oneshot() {
                     -d "{\"model\": \"claude-3-5-haiku-20241022\", \"max_tokens\": 1024, \"messages\": [{\"role\": \"user\", \"content\": \"$escaped_prompt\"}]}" \
                     | jq -r '.content[0].text // .error.message // "Error"'
             else
-                cli::error "No Claude CLI or API key available"
+                cli::error "No Claude CLI, llm tool, or API key available"
                 return 1
             fi
             ;;
         openai|chatgpt|gpt)
+            # 1. Try OpenAI CLI
             if command -v openai &>/dev/null; then
-                # OpenAI CLI (if installed)
                 echo "$prompt" | openai api chat.completions.create -m gpt-4o-mini 2>/dev/null
+            # 2. Try llm tool
+            elif skill::_has_llm; then
+                echo "$prompt" | llm -m gpt-4o-mini 2>/dev/null
+            # 3. Direct API
             elif [[ -n "${OPENAI_API_KEY:-}" ]]; then
-                # Direct API call
                 local escaped_prompt=$(skill::_json_escape "$prompt")
                 curl -s https://api.openai.com/v1/chat/completions \
                     -H "Content-Type: application/json" \
@@ -175,24 +165,32 @@ skill::ai_oneshot() {
                     -d "{\"model\": \"gpt-4o-mini\", \"messages\": [{\"role\": \"user\", \"content\": \"$escaped_prompt\"}]}" \
                     | jq -r '.choices[0].message.content // .error.message // "Error"'
             else
-                cli::error "No OpenAI CLI or API key available"
+                cli::error "No OpenAI CLI, llm tool, or API key available"
                 return 1
             fi
             ;;
         gemini|google)
-            if [[ -n "${GEMINI_API_KEY:-}" ]]; then
+            # 1. Try llm tool (no official gemini CLI)
+            if skill::_has_llm; then
+                echo "$prompt" | llm -m gemini-1.5-flash 2>/dev/null
+            # 2. Direct API
+            elif [[ -n "${GEMINI_API_KEY:-}" ]]; then
                 local escaped_prompt=$(skill::_json_escape "$prompt")
                 curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$GEMINI_API_KEY" \
                     -H "Content-Type: application/json" \
                     -d "{\"contents\": [{\"parts\": [{\"text\": \"$escaped_prompt\"}]}]}" \
                     | jq -r '.candidates[0].content.parts[0].text // .error.message // "Error"'
             else
-                cli::error "No Gemini API key available"
+                cli::error "No llm tool or Gemini API key available"
                 return 1
             fi
             ;;
         mistral)
-            if [[ -n "${MISTRAL_API_KEY:-}" ]]; then
+            # 1. Try llm tool
+            if skill::_has_llm; then
+                echo "$prompt" | llm -m mistral-small-latest 2>/dev/null
+            # 2. Direct API
+            elif [[ -n "${MISTRAL_API_KEY:-}" ]]; then
                 local escaped_prompt=$(skill::_json_escape "$prompt")
                 curl -s https://api.mistral.ai/v1/chat/completions \
                     -H "Content-Type: application/json" \
@@ -200,12 +198,16 @@ skill::ai_oneshot() {
                     -d "{\"model\": \"mistral-small-latest\", \"messages\": [{\"role\": \"user\", \"content\": \"$escaped_prompt\"}]}" \
                     | jq -r '.choices[0].message.content // .error.message // "Error"'
             else
-                cli::error "No Mistral API key available"
+                cli::error "No llm tool or Mistral API key available"
                 return 1
             fi
             ;;
         groq)
-            if [[ -n "${GROQ_API_KEY:-}" ]]; then
+            # 1. Try llm tool
+            if skill::_has_llm; then
+                echo "$prompt" | llm -m groq-llama-3.1-8b-instant 2>/dev/null
+            # 2. Direct API
+            elif [[ -n "${GROQ_API_KEY:-}" ]]; then
                 local escaped_prompt=$(skill::_json_escape "$prompt")
                 curl -s https://api.groq.com/openai/v1/chat/completions \
                     -H "Content-Type: application/json" \
@@ -213,13 +215,17 @@ skill::ai_oneshot() {
                     -d "{\"model\": \"llama-3.1-8b-instant\", \"messages\": [{\"role\": \"user\", \"content\": \"$escaped_prompt\"}]}" \
                     | jq -r '.choices[0].message.content // .error.message // "Error"'
             else
-                cli::error "No Groq API key available"
+                cli::error "No llm tool or Groq API key available"
                 return 1
             fi
             ;;
         llm)
-            # Direct llm tool usage
-            echo "$prompt" | llm 2>/dev/null
+            if skill::_has_llm; then
+                echo "$prompt" | llm 2>/dev/null
+            else
+                cli::error "llm tool not installed"
+                return 1
+            fi
             ;;
         *)
             cli::error "Unknown AI provider: $provider"
@@ -231,40 +237,31 @@ skill::ai_oneshot() {
 
 # Multi-turn AI (for medium AI skills)
 # Combines system prompt with user prompt for providers that support it
+# Priority: native CLI -> llm tool -> direct API
 skill::ai_converse() {
     local system_prompt="$1"
     local user_prompt="$2"
     local provider="${3:-$(maestro::config 'ai.default_provider' 'claude')}"
 
-    # Prefer 'llm' tool - it handles system prompts universally
-    if skill::_has_llm && [[ "$provider" != "ollama" ]]; then
-        case "$provider" in
-            claude|anthropic)
-                echo "$user_prompt" | llm -m claude-3-5-sonnet-latest -s "$system_prompt" 2>/dev/null
-                ;;
-            openai|chatgpt|gpt)
-                echo "$user_prompt" | llm -m gpt-4o -s "$system_prompt" 2>/dev/null
-                ;;
-            gemini|google)
-                echo "$user_prompt" | llm -m gemini-1.5-pro -s "$system_prompt" 2>/dev/null
-                ;;
-            *)
-                echo "$user_prompt" | llm -s "$system_prompt" 2>/dev/null
-                ;;
-        esac
-        return
-    fi
-
-    # Provider-specific fallbacks
     case "$provider" in
         ollama)
             local model=$(maestro::config 'ai.ollama.default_model' 'llama3.2')
             # Ollama doesn't have native system prompt in CLI, prepend it
-            printf "System: %s\n\nUser: %s" "$system_prompt" "$user_prompt" | ollama run "$model" 2>/dev/null
+            if command -v ollama &>/dev/null; then
+                printf "System: %s\n\nUser: %s" "$system_prompt" "$user_prompt" | ollama run "$model" 2>/dev/null
+            else
+                cli::error "Ollama not installed"
+                return 1
+            fi
             ;;
         claude|anthropic)
+            # 1. Try Claude CLI
             if command -v claude &>/dev/null; then
                 echo "$user_prompt" | claude --system-prompt "$system_prompt" --print 2>/dev/null
+            # 2. Try llm tool
+            elif skill::_has_llm; then
+                echo "$user_prompt" | llm -m claude-3-5-sonnet-latest -s "$system_prompt" 2>/dev/null
+            # 3. Direct API
             elif [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
                 local escaped_system=$(skill::_json_escape "$system_prompt")
                 local escaped_user=$(skill::_json_escape "$user_prompt")
@@ -275,12 +272,16 @@ skill::ai_converse() {
                     -d "{\"model\": \"claude-3-5-sonnet-20241022\", \"max_tokens\": 4096, \"system\": \"$escaped_system\", \"messages\": [{\"role\": \"user\", \"content\": \"$escaped_user\"}]}" \
                     | jq -r '.content[0].text // .error.message // "Error"'
             else
-                # Fallback: combine prompts
-                skill::ai_oneshot "$system_prompt\n\n$user_prompt" "$provider"
+                cli::error "No Claude CLI, llm tool, or API key available"
+                return 1
             fi
             ;;
         openai|chatgpt|gpt)
-            if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+            # 1. Try llm tool (openai CLI doesn't support system prompts well)
+            if skill::_has_llm; then
+                echo "$user_prompt" | llm -m gpt-4o -s "$system_prompt" 2>/dev/null
+            # 2. Direct API
+            elif [[ -n "${OPENAI_API_KEY:-}" ]]; then
                 local escaped_system=$(skill::_json_escape "$system_prompt")
                 local escaped_user=$(skill::_json_escape "$user_prompt")
                 curl -s https://api.openai.com/v1/chat/completions \
@@ -289,16 +290,33 @@ skill::ai_converse() {
                     -d "{\"model\": \"gpt-4o\", \"messages\": [{\"role\": \"system\", \"content\": \"$escaped_system\"}, {\"role\": \"user\", \"content\": \"$escaped_user\"}]}" \
                     | jq -r '.choices[0].message.content // .error.message // "Error"'
             else
-                skill::ai_oneshot "$system_prompt\n\n$user_prompt" "$provider"
+                cli::error "No llm tool or OpenAI API key available"
+                return 1
             fi
             ;;
         gemini|google)
-            # Gemini doesn't have a separate system message, prepend to user content
-            local combined="Instructions: $system_prompt\n\nTask: $user_prompt"
-            skill::ai_oneshot "$combined" "$provider"
+            # 1. Try llm tool
+            if skill::_has_llm; then
+                echo "$user_prompt" | llm -m gemini-1.5-pro -s "$system_prompt" 2>/dev/null
+            # 2. Direct API (prepend system to user since Gemini doesn't have system role)
+            elif [[ -n "${GEMINI_API_KEY:-}" ]]; then
+                local combined="Instructions: $system_prompt\n\nTask: $user_prompt"
+                local escaped_prompt=$(skill::_json_escape "$combined")
+                curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=$GEMINI_API_KEY" \
+                    -H "Content-Type: application/json" \
+                    -d "{\"contents\": [{\"parts\": [{\"text\": \"$escaped_prompt\"}]}]}" \
+                    | jq -r '.candidates[0].content.parts[0].text // .error.message // "Error"'
+            else
+                cli::error "No llm tool or Gemini API key available"
+                return 1
+            fi
             ;;
-        mistral|groq)
-            if [[ -n "${MISTRAL_API_KEY:-}" ]] && [[ "$provider" == "mistral" ]]; then
+        mistral)
+            # 1. Try llm tool
+            if skill::_has_llm; then
+                echo "$user_prompt" | llm -m mistral-medium-latest -s "$system_prompt" 2>/dev/null
+            # 2. Direct API
+            elif [[ -n "${MISTRAL_API_KEY:-}" ]]; then
                 local escaped_system=$(skill::_json_escape "$system_prompt")
                 local escaped_user=$(skill::_json_escape "$user_prompt")
                 curl -s https://api.mistral.ai/v1/chat/completions \
@@ -306,7 +324,17 @@ skill::ai_converse() {
                     -H "Authorization: Bearer $MISTRAL_API_KEY" \
                     -d "{\"model\": \"mistral-medium-latest\", \"messages\": [{\"role\": \"system\", \"content\": \"$escaped_system\"}, {\"role\": \"user\", \"content\": \"$escaped_user\"}]}" \
                     | jq -r '.choices[0].message.content // .error.message // "Error"'
-            elif [[ -n "${GROQ_API_KEY:-}" ]] && [[ "$provider" == "groq" ]]; then
+            else
+                cli::error "No llm tool or Mistral API key available"
+                return 1
+            fi
+            ;;
+        groq)
+            # 1. Try llm tool
+            if skill::_has_llm; then
+                echo "$user_prompt" | llm -m groq-llama-3.1-70b-versatile -s "$system_prompt" 2>/dev/null
+            # 2. Direct API
+            elif [[ -n "${GROQ_API_KEY:-}" ]]; then
                 local escaped_system=$(skill::_json_escape "$system_prompt")
                 local escaped_user=$(skill::_json_escape "$user_prompt")
                 curl -s https://api.groq.com/openai/v1/chat/completions \
@@ -315,15 +343,22 @@ skill::ai_converse() {
                     -d "{\"model\": \"llama-3.1-70b-versatile\", \"messages\": [{\"role\": \"system\", \"content\": \"$escaped_system\"}, {\"role\": \"user\", \"content\": \"$escaped_user\"}]}" \
                     | jq -r '.choices[0].message.content // .error.message // "Error"'
             else
-                skill::ai_oneshot "$system_prompt\n\n$user_prompt" "$provider"
+                cli::error "No llm tool or Groq API key available"
+                return 1
             fi
             ;;
         llm)
-            echo "$user_prompt" | llm -s "$system_prompt" 2>/dev/null
+            if skill::_has_llm; then
+                echo "$user_prompt" | llm -s "$system_prompt" 2>/dev/null
+            else
+                cli::error "llm tool not installed"
+                return 1
+            fi
             ;;
         *)
-            # Unknown provider - combine prompts and try oneshot
-            skill::ai_oneshot "$system_prompt\n\n$user_prompt" "$provider"
+            cli::error "Unknown AI provider: $provider"
+            cli::error "Supported: ollama, claude, openai, gemini, mistral, groq, llm"
+            return 1
             ;;
     esac
 }
