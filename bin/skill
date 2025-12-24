@@ -37,6 +37,9 @@ case "$cmd" in
         cli::out "Skill: $skill_name"
         cli::out "AI Level: $ai_level"
         ;;
+    providers|p)
+        skill::ai_providers
+        ;;
     version|-v|--version)
         cli::out "skill (lifemaestro) $MAESTRO_VERSION"
         exit $EXIT_SUCCESS
@@ -55,6 +58,7 @@ case "$cmd" in
         cli::out "    list             List available skills"
         cli::out "    run <name>       Run a skill"
         cli::out "    info <name>      Show skill info"
+        cli::out "    providers        List available AI providers"
         cli::out ""
         cli::out "AI Levels:"
         cli::out "    ○ none    - Pure bash, zero AI tokens"
