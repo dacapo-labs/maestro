@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# {{SKILL_NAME}} - {{SKILL_DESCRIPTION}}
+# Part of LifeMaestro skill: {{SKILL_NAME}}
+
+set -euo pipefail
+
+# ============================================
+# CONFIGURATION
+# ============================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
+
+# ============================================
+# HELPERS
+# ============================================
+
+die() {
+    echo "Error: $*" >&2
+    exit 1
+}
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") <arg1> [options]
+
+{{SKILL_DESCRIPTION}}
+
+Arguments:
+    arg1            Required argument description
+
+Options:
+    -h, --help      Show this help
+    -q, --quiet     Suppress non-essential output
+
+Examples:
+    $(basename "$0") "input"
+    $(basename "$0") "input" --quiet
+EOF
+    exit 0
+}
+
+# ============================================
+# MAIN
+# ============================================
+
+main() {
+    local arg1=""
+    local quiet=false
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                usage
+                ;;
+            -q|--quiet)
+                quiet=true
+                shift
+                ;;
+            -*)
+                die "Unknown option: $1"
+                ;;
+            *)
+                if [[ -z "$arg1" ]]; then
+                    arg1="$1"
+                else
+                    die "Unexpected argument: $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    # Validate
+    [[ -n "$arg1" ]] || die "Missing required argument"
+
+    # Execute
+    # TODO: Implement skill logic here
+    echo "{{SKILL_NAME}} executed with: $arg1"
+}
+
+main "$@"

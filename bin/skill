@@ -20,6 +20,10 @@ case "$cmd" in
     list|ls)
         skill::list
         ;;
+    new|create|n)
+        # Scaffold a new skill
+        "$MAESTRO_ROOT/skills/scaffold.sh" "$@"
+        ;;
     run|r)
         if [[ $# -lt 1 ]]; then
             cli::die_usage "Usage: skill run <skill-name> [args...]"
@@ -56,6 +60,7 @@ case "$cmd" in
         cli::out ""
         cli::out "Commands:"
         cli::out "    list             List available skills"
+        cli::out "    new <name>       Create a new skill from template"
         cli::out "    run <name>       Run a skill"
         cli::out "    info <name>      Show skill info"
         cli::out "    providers        List available AI providers"
