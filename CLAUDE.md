@@ -1,33 +1,43 @@
 # LifeMaestro Development Guide
 
 This file contains principles and guidelines for AI agents working on LifeMaestro.
+Incorporates official Anthropic skill specifications from github.com/anthropics/skills.
 
-## Core Philosophy
+## Core Principles (Official Anthropic)
 
-**Begin with the end in mind.** Before writing any code or prompts:
-1. Define the **purpose** - What problem are we solving?
-2. Define the **deliverable** - What concrete outputs will exist when done?
-3. Define the **structure** - What files/directories will be created?
+### 1. Concise is Key
+> "The context window is a public good."
 
-## Skill Development Principles
+**Claude is already smart.** Only add context Claude doesn't already have.
+- Challenge: "Does Claude really need this explanation?"
+- Challenge: "Does this paragraph justify its token cost?"
+- **Prefer concise examples over verbose explanations.**
 
-### The Core Four
-Every skill ultimately boils down to:
-- **Context** - What information does the agent need?
-- **Model** - Which AI model runs this?
-- **Prompt** - What instructions guide the agent?
-- **Tools** - What scripts/commands extend capability?
+### 2. Degrees of Freedom
+Match specificity to task fragility:
+- **High freedom**: Multiple approaches valid → text instructions
+- **Medium freedom**: Preferred pattern exists → pseudocode/scripts with params
+- **Low freedom**: Operations fragile → specific scripts, few params
 
-### Skill Directory Structure
+### 3. Progressive Disclosure
+Three-level loading system:
+| Level | When Loaded | Target Size |
+|-------|-------------|-------------|
+| Metadata (name+description) | Always | ~100 words |
+| SKILL.md body | On trigger | <500 lines |
+| Bundled resources | As needed | Unlimited |
+
+## Skill Directory Structure (Official)
+
 ```
 .claude/skills/<skill-name>/
-├── SKILL.md              # Pivot file - central routing and instructions
-├── tools/                # Executable scripts (zero tokens until invoked)
-│   └── <tool>.sh
-├── cookbook/             # Progressive disclosure documentation
-│   └── <use-case>.md
-└── prompts/              # Reusable prompt templates (optional)
-    └── <prompt>.md
+├── SKILL.md              # Required - routing and instructions
+├── scripts/              # Executable code (Python/Bash/etc.)
+│   └── <script>.sh
+├── references/           # Documentation loaded as needed
+│   └── <topic>.md
+└── assets/               # Files used in output (templates, images)
+    └── <asset>.png
 ```
 
 ### SKILL.md Structure (Official Anthropic Format)
@@ -37,45 +47,38 @@ name: skill-name              # Lowercase, hyphens, max 64 chars
 description: |
   What this skill does in detail.
   Use when <trigger conditions>.
-  Handles <specific use cases>.
-allowed-tools:                # Optional: restrict tool access
-  - Read
-  - Bash
-  - Glob
+  Triggers: keyword1, keyword2, keyword3.
 ---
 
 # Skill Name
 
-## Variables
-- enable_feature_x: true/false
-
 ## Instructions
 Step-by-step guidance for Claude:
 1. First step
-2. Second step
-3. Execute tools/<script>.sh
+2. Read references/<topic>.md for details
+3. Execute scripts/<script>.sh
 
 ## Examples
 
 ### Example 1
-**User**: "Do X with Y"
-**Action**: Execute tool with parameters
+**Input**: "Do X with Y"
+**Action**: Execute script with parameters
 
 ## Version History
 - v1.0.0 (date): Initial release
 ```
 
 ### Key Official Guidelines
-- **Skills are model-invoked** - Claude decides when to use them based on description
-- **Description is crucial** - Be specific about what triggers the skill
-- **allowed-tools** - Optional security to restrict what the skill can do
-- **Version History** - Track changes for team collaboration
+- **Description is CRUCIAL** - It's how Claude discovers skills. Put ALL triggers here.
+- **Body loads AFTER triggering** - "When to use" in body is useless
+- **No auxiliary files** - Don't create README.md, CHANGELOG.md, etc.
+- **Scripts execute without reading** - Token efficient
 
 ### Progressive Disclosure
 Don't dump everything into context. Instead:
-1. SKILL.md provides **routing logic** (~500 tokens)
-2. Cookbook files are read **only when needed**
-3. Tools execute **with zero token cost**
+1. SKILL.md provides **routing logic** (<500 lines)
+2. References are read **only when needed**
+3. Scripts execute **with zero token cost**
 
 ### Variables Section
 Use variables to enable/disable features:
@@ -136,25 +139,27 @@ CLI commands and Claude Code skills share the same underlying scripts:
 ```
 CLI: ticket sdp 12345
         │
-        └──▶ tools/sdp-fetch.sh ◀──┐
-                                    │
-Agent: "fetch that SDP ticket"     │
-        │                          │
-        └──▶ SKILL.md ──▶ cookbook ─┘
+        └──▶ scripts/sdp-fetch.sh ◀──┐
+                                      │
+Agent: "fetch that SDP ticket"       │
+        │                            │
+        └──▶ SKILL.md ──▶ references ─┘
 ```
 
 ### Token Efficiency
-- SKILL.md for routing (~500 tokens)
-- Cookbook for detailed docs (loaded on demand)
-- Tools for execution (0 tokens)
+- SKILL.md for routing (<500 lines)
+- References for detailed docs (loaded on demand)
+- Scripts for execution (0 tokens - can run without reading)
 
 ## When Creating New Skills
 
-1. **Define the trigger** - When should this skill activate?
-2. **Define the tools** - What scripts need to exist?
-3. **Define the cookbook** - What use-case docs are needed?
-4. **Write SKILL.md** - Route to the right cookbook/tool
+1. **Define the trigger** - What description will make Claude use this skill?
+2. **Define the scripts** - What executable code is needed?
+3. **Define the references** - What documentation should be loaded on demand?
+4. **Write SKILL.md** - Clear description, concise instructions, route to references
 5. **Test iteratively** - Start simple, observe, improve
+
+Use `skill new <name>` to scaffold the official structure.
 
 ## References
 

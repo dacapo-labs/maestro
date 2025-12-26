@@ -1,0 +1,66 @@
+# {{SKILL_NAME}} Reference
+
+## Overview
+
+This document provides detailed instructions for the {{SKILL_NAME}} skill.
+Load this file when you need guidance on executing this skill.
+
+## Prerequisites
+
+- List any required tools, APIs, or credentials
+- Environment variables needed
+- Dependencies
+
+## Workflow
+
+### Step 1: Validate Input
+- Check that required parameters are provided
+- Validate format and constraints
+
+### Step 2: Execute
+- Run `scripts/{{SKILL_NAME}}.sh` with parameters
+- Handle any errors gracefully
+
+### Step 3: Format Output
+- Present results clearly to the user
+- Include relevant context
+
+## Script Reference
+
+### scripts/{{SKILL_NAME}}.sh
+
+```bash
+./scripts/{{SKILL_NAME}}.sh <arg1> [arg2]
+```
+
+**Arguments:**
+- `arg1` - Required: Description
+- `arg2` - Optional: Description
+
+**Output:**
+- Returns JSON/text to stdout
+- Errors go to stderr
+- Exit code 0 on success, non-zero on failure
+
+## Examples
+
+### Example 1: Basic Usage
+
+**Input**: User asks for basic operation
+**Command**: `./scripts/{{SKILL_NAME}}.sh "input"`
+**Output**: Expected result
+
+### Example 2: With Options
+
+**Input**: User asks for advanced operation
+**Command**: `./scripts/{{SKILL_NAME}}.sh "input" --option`
+**Output**: Expected result with option applied
+
+## Troubleshooting
+
+### Common Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Error message 1 | Missing dependency | Install X |
+| Error message 2 | Invalid input | Check format |

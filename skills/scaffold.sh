@@ -45,10 +45,11 @@ Examples:
 Structure Created (--type both):
     .claude/skills/<name>/
     ├── SKILL.md
-    ├── cookbook/
+    ├── scripts/           # Executable code
+    │   └── <name>.sh
+    ├── references/        # Documentation loaded as needed
     │   └── <name>.md
-    └── tools/
-        └── <name>.sh
+    └── assets/            # Files used in output (templates, etc.)
 EOF
     exit 0
 }
@@ -81,21 +82,26 @@ create_agent_skill() {
 
     log_info "Creating Claude Code skill: $skill_dir"
 
-    mkdir -p "$skill_dir/cookbook"
-    mkdir -p "$skill_dir/tools"
+    # Official Anthropic structure: scripts/, references/, assets/
+    mkdir -p "$skill_dir/scripts"
+    mkdir -p "$skill_dir/references"
+    mkdir -p "$skill_dir/assets"
 
     # SKILL.md
     render_template "$TEMPLATES_DIR/SKILL.md.tmpl" "$skill_dir/SKILL.md"
     log_ok "Created SKILL.md"
 
-    # Cookbook
-    render_template "$TEMPLATES_DIR/cookbook.md.tmpl" "$skill_dir/cookbook/$SKILL_SLUG.md"
-    log_ok "Created cookbook/$SKILL_SLUG.md"
+    # Reference documentation
+    render_template "$TEMPLATES_DIR/reference.md.tmpl" "$skill_dir/references/$SKILL_SLUG.md"
+    log_ok "Created references/$SKILL_SLUG.md"
 
-    # Tool
-    render_template "$TEMPLATES_DIR/tool.sh.tmpl" "$skill_dir/tools/$SKILL_SLUG.sh"
-    chmod +x "$skill_dir/tools/$SKILL_SLUG.sh"
-    log_ok "Created tools/$SKILL_SLUG.sh"
+    # Executable script
+    render_template "$TEMPLATES_DIR/script.sh.tmpl" "$skill_dir/scripts/$SKILL_SLUG.sh"
+    chmod +x "$skill_dir/scripts/$SKILL_SLUG.sh"
+    log_ok "Created scripts/$SKILL_SLUG.sh"
+
+    # Create .gitkeep in assets (often empty initially)
+    touch "$skill_dir/assets/.gitkeep"
 
     echo ""
     log_ok "Agent skill created at: $skill_dir"
@@ -218,16 +224,16 @@ main() {
 
     echo ""
     echo "Next steps:"
-    echo "  1. Edit the generated files to implement your skill"
-    echo "  2. Update SKILL.md with proper routing logic"
-    echo "  3. Implement tool script logic"
+    echo "  1. Edit SKILL.md - update description with clear triggers"
+    echo "  2. Implement scripts/$SKILL_SLUG.sh - the executable"
+    echo "  3. Update references/$SKILL_SLUG.md - detailed documentation"
     echo "  4. Test with: skill run $SKILL_SLUG <input>"
     echo ""
     echo "Files to edit:"
     if [[ "$skill_type" == "agent" || "$skill_type" == "both" ]]; then
         echo "  .claude/skills/$SKILL_SLUG/SKILL.md"
-        echo "  .claude/skills/$SKILL_SLUG/cookbook/$SKILL_SLUG.md"
-        echo "  .claude/skills/$SKILL_SLUG/tools/$SKILL_SLUG.sh"
+        echo "  .claude/skills/$SKILL_SLUG/scripts/$SKILL_SLUG.sh"
+        echo "  .claude/skills/$SKILL_SLUG/references/$SKILL_SLUG.md"
     fi
     if [[ "$skill_type" == "cli" || "$skill_type" == "both" ]]; then
         echo "  core/skills.sh (skill function)"

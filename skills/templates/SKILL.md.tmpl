@@ -2,35 +2,36 @@
 name: {{SKILL_NAME}}
 description: |
   {{SKILL_DESCRIPTION}}. Use when {{SKILL_TRIGGER}}.
-  Provides functionality for {{SKILL_PURPOSE}}.
-allowed-tools:
-  - Read
-  - Bash
-  - Glob
-  - Grep
+  Triggers: {{SKILL_PURPOSE}}.
 ---
 
 # {{SKILL_NAME}}
 
-## Variables
-- enabled: true
+## Overview
+
+This skill provides {{SKILL_DESCRIPTION}}.
 
 ## Instructions
 
 1. Understand the user's request
-2. Read `cookbook/{{SKILL_NAME}}.md` for detailed instructions
-3. Execute `tools/{{SKILL_NAME}}.sh` with appropriate arguments
+2. Read `references/{{SKILL_NAME}}.md` for detailed guidance
+3. Execute `scripts/{{SKILL_NAME}}.sh` with appropriate arguments
 4. Return results to user
+
+## Bundled Resources
+
+- **scripts/{{SKILL_NAME}}.sh** - Main executable script
+- **references/{{SKILL_NAME}}.md** - Detailed documentation and examples
 
 ## Examples
 
 ### Example 1
-**User**: "{{EXAMPLE_1}}"
-**Action**: Execute {{SKILL_NAME}} tool with user's input
+**Input**: "{{EXAMPLE_1}}"
+**Action**: Run scripts/{{SKILL_NAME}}.sh with parameters
 
 ### Example 2
-**User**: "{{EXAMPLE_2}}"
-**Action**: Execute {{SKILL_NAME}} tool with parameters
+**Input**: "{{EXAMPLE_2}}"
+**Action**: Run scripts/{{SKILL_NAME}}.sh with parameters
 
 ## Version History
 - v1.0.0 ({{DATE}}): Initial release

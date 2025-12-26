@@ -1,49 +1,126 @@
 # Skill Design Guide
 
-This guide combines LifeMaestro patterns with Anthropic's official Claude Code skill specifications.
+This guide incorporates official Anthropic skill specifications from github.com/anthropics/skills.
 
-## Official SKILL.md Format (Anthropic)
+## Core Principles (Official Anthropic)
+
+### 1. Concise is Key
+
+> "The context window is a public good."
+
+Skills share the context window with everything else: system prompt, conversation history, other skills, and the user's request.
+
+**Default assumption: Claude is already very smart.** Only add context Claude doesn't already have.
+
+Challenge each piece of information:
+- "Does Claude really need this explanation?"
+- "Does this paragraph justify its token cost?"
+
+**Prefer concise examples over verbose explanations.**
+
+### 2. Degrees of Freedom
+
+Match the level of specificity to the task's fragility:
+
+| Freedom Level | When to Use | Example |
+|--------------|-------------|---------|
+| **High** (text instructions) | Multiple approaches valid, context-dependent | "Summarize this document" |
+| **Medium** (pseudocode/scripts with params) | Preferred pattern exists, some variation OK | "Generate report using template X" |
+| **Low** (specific scripts, few params) | Operations fragile, consistency critical | "Rotate PDF exactly 90 degrees" |
+
+Think of Claude navigating a path: narrow bridge needs guardrails (low freedom), open field allows many routes (high freedom).
+
+### 3. Progressive Disclosure
+
+Skills use a three-level loading system:
+
+| Level | When Loaded | Size Target |
+|-------|-------------|-------------|
+| **Metadata** (name + description) | Always in context | ~100 words |
+| **SKILL.md body** | When skill triggers | <5k words, ideally <500 lines |
+| **Bundled resources** | As needed by Claude | Unlimited (scripts execute without reading) |
+
+## Official Skill Structure
+
+```
+skill-name/
+├── SKILL.md              # Required - routing and instructions
+├── scripts/              # Executable code (Python/Bash/etc.)
+│   └── my-script.sh
+├── references/           # Documentation loaded as needed
+│   └── detailed-guide.md
+└── assets/               # Files used in output (templates, images)
+    └── template.pptx
+```
+
+### SKILL.md Format
 
 ```yaml
 ---
-name: skill-name          # Lowercase, hyphens, max 64 characters
+name: skill-name              # Lowercase, hyphens, max 64 chars
 description: |
-  Detailed description of what the skill does.
-  Explain when to use it and what triggers it.
-allowed-tools:            # Optional: Restrict tool access
-  - Read
-  - Bash
-  - Glob
+  What this skill does in detail.
+  Use when <specific triggers>.
+  Triggers: <keyword list>.
 ---
 
-# Skill Title
+# Skill Name
 
 ## Instructions
-Step-by-step guidance for Claude
+Step-by-step guidance...
 
 ## Examples
-Concrete use cases and sample interactions
+Input/output pairs...
 
 ## Version History
 - v1.0.0 (date): Initial release
 ```
 
-### Key Points from Official Docs
-- **Skills are model-invoked** - Claude autonomously decides when to use them
-- **Description is crucial** - It's how Claude discovers and matches skills
-- **Multi-line descriptions** - Use `|` for detailed descriptions
-- **allowed-tools** - Optional security restriction on what tools the skill can use
+### Bundled Resources
+
+#### scripts/
+Executable code for tasks requiring deterministic reliability.
+
+**When to include:**
+- Same code being rewritten repeatedly
+- Deterministic reliability needed
+- Complex operations that are error-prone
+
+**Benefits:** Token efficient, deterministic, can execute without loading into context.
+
+#### references/
+Documentation loaded as needed to inform Claude's process.
+
+**When to include:**
+- Domain-specific knowledge
+- API documentation
+- Detailed workflow guides
+- Company policies or schemas
+
+**Best practices:**
+- If files are large (>10k words), include grep patterns in SKILL.md
+- Information should live in EITHER SKILL.md OR references, not both
+- Keep SKILL.md lean; move details to references
+
+#### assets/
+Files used in output, NOT loaded into context.
+
+**When to include:**
+- Templates (PowerPoint, HTML)
+- Images, icons, fonts
+- Boilerplate code
+- Sample documents
 
 ## Writing Good Descriptions
 
-The description is how Claude discovers your skill. Be specific and explicit.
+The description is how Claude discovers your skill. **This is crucial.**
 
 ### Good Description
 ```yaml
 description: |
   Analyze Excel spreadsheets, create pivot tables, and generate charts.
   Use when working with Excel files, spreadsheets, or analyzing tabular
-  data in .xlsx format.
+  data in .xlsx format. Triggers: excel, spreadsheet, xlsx, pivot table.
 ```
 
 ### Bad Description
@@ -51,139 +128,57 @@ description: |
 description: For files
 ```
 
-### Description Checklist
-- [ ] Explains what the skill does
-- [ ] Explains when to use it (triggers)
-- [ ] Mentions relevant file types or keywords
-- [ ] Is specific enough to avoid false matches
-- [ ] Is broad enough to catch valid use cases
+### Description Rules
+- Include WHAT the skill does
+- Include WHEN to use it (triggers)
+- Put ALL trigger information in description, NOT in body
+- Body only loads AFTER triggering, so "When to Use" sections in body are useless
 
-## The Planning Phase
+## What NOT to Include
 
-**Always begin with the end in mind.** Before writing any code:
+A skill should only contain essential files. Do NOT create:
 
-1. **Define the Purpose**
-   - What problem does this skill solve?
-   - Who will use it? (human via CLI, agent, or both)
-   - What's the expected output?
+- README.md
+- INSTALLATION_GUIDE.md
+- QUICK_REFERENCE.md
+- CHANGELOG.md
+- Any auxiliary documentation
 
-2. **Define the Trigger**
-   - When should this skill activate?
-   - What keywords or patterns indicate this skill?
-   - Write clear USE WHEN conditions
+The skill is for an AI agent, not human documentation.
 
-3. **Define the Structure**
-   - What files will be created?
-   - What tools are needed?
-   - What documentation goes in the cookbook?
+## Skill Creation Process (Official)
 
-## Skill Architecture
+1. **Understand** - Gather concrete examples of usage
+2. **Plan** - Identify reusable scripts, references, assets
+3. **Initialize** - Create directory structure
+4. **Edit** - Implement resources and write SKILL.md
+5. **Test** - Verify scripts work, skill triggers correctly
+6. **Iterate** - Improve based on real usage
 
-### Directory Structure
-```
-.claude/skills/<skill-name>/
-├── SKILL.md              # Pivot file - routing logic (~500 tokens)
-├── cookbook/             # Progressive disclosure docs
-│   ├── main-use-case.md
-│   └── advanced-use-case.md
-└── tools/                # Executable scripts (0 tokens)
-    └── <tool>.sh
-```
+## LifeMaestro Extensions
 
-### SKILL.md Template
+LifeMaestro adds these patterns on top of official specs:
+
+### Variables Section
 ```markdown
----
-name: skill-name
-description: One sentence. USE WHEN <specific trigger>.
----
-
-# Skill Name
-
 ## Variables
 - enable_feature_x: true
-
-## Purpose
-What this skill does (2-3 sentences).
-
-## Instructions
-If <condition> AND <variable> is true:
-1. Read cookbook/<relevant>.md
-2. Execute tools/<script>.sh
-
-## Examples
-- "User says X" → Do Y
+- default_format: json
 ```
 
-### Token Efficiency
-
-| Component | Token Cost | Purpose |
-|-----------|------------|---------|
-| SKILL.md | ~500 | Routing, always loaded |
-| Cookbook | On-demand | Detailed instructions |
-| Tools | 0 | Execution scripts |
-
-**Key insight**: Only load cookbook docs when needed. Tools cost zero tokens.
-
-## The Shared Tools Pattern
-
-CLI and agent should share the same underlying scripts:
-
+### Shared Tools Pattern
+CLI and agent share the same scripts:
 ```
 CLI: skill run fetch-data 123
         │
-        └──▶ tools/fetch-data.sh ◀──┐
-                                     │
-Agent: "fetch data for 123"         │
-        │                           │
-        └──▶ SKILL.md ──▶ cookbook ─┘
+        └──▶ scripts/fetch.sh ◀──┐
+                                  │
+Agent: "fetch data for 123"      │
+        │                        │
+        └──▶ SKILL.md → refs ────┘
 ```
 
-Benefits:
-- Single source of truth
-- Test via CLI, use via agent
-- Consistent behavior
-
-## Variables Section
-
-Use variables for feature toggles:
-
-```markdown
-## Variables
-- enable_advanced_mode: false
-- default_format: json
-- max_results: 10
+### Quick Scaffold
+```bash
+skill new my-skill --description "Does X" --trigger "user asks for X"
 ```
-
-Reference in instructions:
-```markdown
-If user requests advanced features AND enable_advanced_mode is true:
-- Read cookbook/advanced.md
-```
-
-## Progressive Disclosure
-
-Don't dump everything into SKILL.md. Instead:
-
-1. **SKILL.md** - Just routing logic
-2. **Cookbook** - Detailed instructions per use case
-3. **Tools** - Actual implementation
-
-This keeps token usage low while providing depth when needed.
-
-## Naming Conventions
-
-- Skill directories: `kebab-case` (e.g., `ticket-lookup`)
-- Tool scripts: `kebab-case.sh` (e.g., `fetch-ticket.sh`)
-- Cookbook files: `kebab-case.md` (e.g., `jira-lookup.md`)
-- Variables: `snake_case` (e.g., `enable_jira`)
-
-## Testing Checklist
-
-Before considering a skill complete:
-
-- [ ] SKILL.md has clear USE WHEN trigger
-- [ ] Tools are executable and work standalone
-- [ ] Cookbook provides enough detail
-- [ ] CLI invocation works: `skill run <name> <args>`
-- [ ] Agent understands when to use it
-- [ ] Error handling is graceful

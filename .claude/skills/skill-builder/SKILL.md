@@ -1,11 +1,14 @@
 ---
 name: skill-builder
-description: Build new LifeMaestro skills. USE WHEN user wants to create, design, or scaffold a new skill.
+description: |
+  Build new skills following official Anthropic patterns. Use when user wants to
+  create, design, scaffold, or improve a skill. Triggers: create skill, new skill,
+  build skill, scaffold skill, improve skill, skill design.
 ---
 
 # Skill Builder
 
-Meta-skill for creating new LifeMaestro skills following best practices.
+Meta-skill for creating skills following official Anthropic specifications (github.com/anthropics/skills).
 
 ## Variables
 - enabled: true
@@ -22,35 +25,40 @@ Help design and create new skills that follow LifeMaestro patterns:
 
 ### When user wants to CREATE a new skill:
 
-1. **First, gather requirements:**
+1. **Gather requirements:**
    - What problem does this skill solve?
-   - What's the trigger? (When should it activate?)
-   - What tools/APIs does it need?
-   - Should it be CLI, agent, or both?
+   - What are the trigger phrases? (crucial for description)
+   - What scripts/references/assets are needed?
 
-2. **Read the principles:**
-   - Read `CLAUDE.md` for skill development guidelines
-   - Read `cookbook/skill-design.md` for architecture patterns
+2. **Read the design guide:**
+   - Read `cookbook/skill-design.md` for official Anthropic patterns
 
 3. **Design the skill:**
-   - Define the file structure
-   - Plan the progressive disclosure
-   - Identify shared tools
+   - Plan: scripts/ (executable), references/ (docs), assets/ (templates)
+   - Write description with ALL trigger information
+   - Keep SKILL.md body concise (<500 lines)
 
 4. **Scaffold the skill:**
-   - Run `tools/scaffold-skill.sh <name> [options]`
-   - This creates the directory structure and templates
+   - Run `scripts/scaffold-skill.sh <name> [options]`
+   - Creates official directory structure
 
-5. **Implement the skill:**
-   - Edit SKILL.md with routing logic
-   - Write cookbook documentation
-   - Implement tool scripts
+5. **Implement:**
+   - Edit SKILL.md - focus on clear description and instructions
+   - Implement scripts/ - test that they work standalone
+   - Write references/ - detailed docs loaded on demand
 
 ### When user wants to IMPROVE an existing skill:
 
 1. Read the current skill files
-2. Read `cookbook/skill-patterns.md` for best practices
-3. Suggest improvements based on principles
+2. Check against `cookbook/skill-design.md` principles
+3. For workflow issues: see `references/workflows.md`
+4. For output issues: see `references/output-patterns.md`
+
+### Key Official Principles:
+
+- **Concise is key** - Context window is shared, only add what Claude doesn't know
+- **Description is crucial** - It's the ONLY thing that triggers the skill
+- **Progressive disclosure** - SKILL.md routes to references, don't dump everything
 
 ## Examples
 
