@@ -152,6 +152,12 @@ sync_all() {
     fi
 
     log_ok "All vendors synced"
+
+    # Auto-link vendor skills into .claude/skills/
+    if [[ -x "$SCRIPT_DIR/link-skills.sh" ]]; then
+        echo ""
+        "$SCRIPT_DIR/link-skills.sh" link
+    fi
 }
 
 # List configured vendors
