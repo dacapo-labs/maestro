@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "description": "GitHub integration - PRs, issues, repos"
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-filesystem", "${HOME}"],
+      "description": "Enhanced filesystem access"
+    }
+  },
+  "_examples": {
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@bytebase/dbhub", "--dsn", "postgresql://user:pass@host:5432/db"],
+      "description": "Database queries (configure DSN)"
+    },
+    "slack": {
+      "type": "http",
+      "url": "https://mcp.slack.com/",
+      "description": "Slack integration"
+    },
+    "jira": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-jira"],
+      "env": {
+        "JIRA_URL": "https://your-org.atlassian.net",
+        "JIRA_EMAIL": "${JIRA_EMAIL}",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+      },
+      "description": "Jira integration"
+    }
+  }
+}
