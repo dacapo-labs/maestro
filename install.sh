@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # LifeMaestro Installer
-
-set -euo pipefail
+# Does NOT use set -e - handles errors gracefully per tool
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="${MAESTRO_ROOT:-$HOME/.config/lifemaestro}"
+FAILED_TOOLS=""
 
+# Logging helpers
+log() { echo "[$(date '+%H:%M:%S')] $*"; }
+log_success() { log "✓ $*"; }
+log_error() { log "✗ $*"; FAILED_TOOLS="$FAILED_TOOLS $1"; }
+log_skip() { log "○ $* (already installed)"; }
+
+echo ""
 echo "LifeMaestro Installer"
 echo "====================="
 echo ""
@@ -318,6 +325,15 @@ if ! command -v claude &>/dev/null; then
     fi
 else
     echo "  claude already installed"
+fi
+
+# Summary
+echo ""
+if [[ -n "$FAILED_TOOLS" ]]; then
+    log_error "Some tools failed to install:$FAILED_TOOLS"
+    echo "  Re-run install.sh to retry, or install manually"
+else
+    log_success "All tools installed successfully"
 fi
 
 echo ""
