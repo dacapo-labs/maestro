@@ -4,13 +4,14 @@ set -euo pipefail
 
 MAESTRO_ROOT="${MAESTRO_ROOT:-${XDG_CONFIG_HOME:-$HOME/.config}/lifemaestro}"
 MAESTRO_CONFIG="${MAESTRO_CONFIG:-$MAESTRO_ROOT/config.toml}"
+GIT_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/git"
 
 zone="${1:-}"
 
 if [[ -z "$zone" ]]; then
     echo "Usage: zone-switch.sh <zone-name>" >&2
     echo "Available zones:" >&2
-    "$MAESTRO_ROOT/.claude/skills/zone-context/tools/zone-list.sh" >&2
+    "$MAESTRO_ROOT/.claude/skills/zone-context/scripts/zone-list.sh" >&2
     exit 1
 fi
 
@@ -33,10 +34,31 @@ if command -v dasel &>/dev/null && [[ -f "$MAESTRO_CONFIG" ]]; then
     github_ssh=$(dasel -f "$MAESTRO_CONFIG" -r toml "zones.$zone.github.ssh_host" 2>/dev/null || true)
     aws_profile=$(dasel -f "$MAESTRO_CONFIG" -r toml "zones.$zone.aws.profile" 2>/dev/null || true)
 
-    # Configure git if in a git repo
-    if [[ -d ".git" ]] && [[ -n "$git_user" ]] && [[ -n "$git_email" ]]; then
-        echo "git config user.name '$git_user'"
-        echo "git config user.email '$git_email'"
+    # Update git config files (created by aws-devbox)
+    # These are included conditionally in ~/.gitconfig based on directory
+    if [[ -n "$git_user" ]] && [[ -n "$git_email" ]]; then
+        # Map zone to config file suffix (work, home/personal)
+        config_suffix="$zone"
+        [[ "$zone" == "personal" ]] && config_suffix="home"
+
+        git_config_file="$GIT_CONFIG_DIR/config-$config_suffix"
+
+        # Create git config directory if needed
+        if [[ ! -d "$GIT_CONFIG_DIR" ]]; then
+            echo "mkdir -p '$GIT_CONFIG_DIR'"
+        fi
+
+        # Update the zone-specific git config file
+        if [[ -f "$git_config_file" ]] || [[ -d "$GIT_CONFIG_DIR" ]]; then
+            echo "git config --file '$git_config_file' user.name '$git_user'"
+            echo "git config --file '$git_config_file' user.email '$git_email'"
+        fi
+
+        # Also configure current repo if in a git directory
+        if [[ -d ".git" ]]; then
+            echo "git config user.name '$git_user'"
+            echo "git config user.email '$git_email'"
+        fi
     fi
 
     # Export AWS profile

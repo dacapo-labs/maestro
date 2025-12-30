@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 # Usage: source bw-unlock
 # Unlocks Bitwarden vault and exports BW_SESSION
+# Delegates to aws-devbox version if available, falls back to inline implementation
 
 set -uo pipefail
 
+# Try aws-devbox version first
+AWS_DEVBOX_BW="${AWS_DEVBOX_HOME:-$HOME/aws-devbox}/bin/bw-unlock"
+if [[ -x "$AWS_DEVBOX_BW" ]]; then
+    source "$AWS_DEVBOX_BW"
+    return $? 2>/dev/null || exit $?
+fi
+
+# Fallback: inline implementation
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 MASTER_FILE="$PROJECT_ROOT/secrets/bw-master"
