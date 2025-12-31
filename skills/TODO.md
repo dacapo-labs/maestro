@@ -64,6 +64,20 @@
   - Go-to-definition, find-references, hover info
   - Could improve code navigation and understanding
 
+- [ ] **Auto-commit to GitHub** - Regular automatic commits:
+  - Cadence options: hourly? end-of-session? on idle? cron?
+  - Commit sessions, config changes, skill updates
+  - Avoid committing mid-work (dirty state)
+  - Could use hooks or background daemon
+  - Consider: commit on session close, daily cron backup
+
+- [ ] **Secure Backup for Conversation Logs** - Full transcripts preserved:
+  - Transcripts may contain secrets - need encryption
+  - Options: git-crypt, age encryption, encrypted remote (restic/borg)
+  - Separate from main repo (transcripts gitignored there)
+  - Dedicated encrypted backup location
+  - Retention policy: how long to keep? compress old logs?
+
 ## Architecture Complete
 
 ```
