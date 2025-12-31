@@ -37,11 +37,12 @@ if command -v dasel &>/dev/null && [[ -f "$MAESTRO_CONFIG" ]]; then
     # Update git config files (created by aws-devbox)
     # These are included conditionally in ~/.gitconfig based on directory
     if [[ -n "$git_user" ]] && [[ -n "$git_email" ]]; then
-        # Map zone to config file suffix (work, home/personal)
-        config_suffix="$zone"
-        [[ "$zone" == "personal" ]] && config_suffix="home"
-
-        git_config_file="$GIT_CONFIG_DIR/config-$config_suffix"
+        # Map zone to config file: personal/home → config-home, work/* → config-work
+        case "$zone" in
+            personal|home) config_file="$GIT_CONFIG_DIR/config-home" ;;
+            work|work-*|*-work) config_file="$GIT_CONFIG_DIR/config-work" ;;
+            *) config_file="$GIT_CONFIG_DIR/config-$zone" ;;
+        esac
 
         # Create git config directory if needed
         if [[ ! -d "$GIT_CONFIG_DIR" ]]; then
@@ -49,10 +50,8 @@ if command -v dasel &>/dev/null && [[ -f "$MAESTRO_CONFIG" ]]; then
         fi
 
         # Update the zone-specific git config file
-        if [[ -f "$git_config_file" ]] || [[ -d "$GIT_CONFIG_DIR" ]]; then
-            echo "git config --file '$git_config_file' user.name '$git_user'"
-            echo "git config --file '$git_config_file' user.email '$git_email'"
-        fi
+        echo "git config --file '$config_file' user.name '$git_user'"
+        echo "git config --file '$config_file' user.email '$git_email'"
 
         # Also configure current repo if in a git directory
         if [[ -d ".git" ]]; then
