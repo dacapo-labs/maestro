@@ -1,34 +1,29 @@
 #!/usr/bin/env bash
 # Usage: source bw-unlock
-# Unlocks Bitwarden vault and exports BW_SESSION
+# Wrapper that delegates to aws-devbox's bw-unlock implementation
 
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-MASTER_FILE="$PROJECT_ROOT/secrets/bw-master"
+BW_UNLOCK_PATHS=("$HOME/bin/bw-unlock" "$HOME/.local/bin/bw-unlock" "/usr/local/bin/bw-unlock")
+for path in "${BW_UNLOCK_PATHS[@]}"; do
+    if [[ -f "$path" ]]; then
+        source "$path"
+        return 0 2>/dev/null || exit 0
+    fi
+done
 
-# Check if already unlocked
-if bw unlock --check &>/dev/null; then
-    echo "Bitwarden already unlocked"
-    return 0 2>/dev/null || exit 0
-fi
+# Fallback inline implementation
+BW_SESSION_FILE="$HOME/.config/bitwarden/session"
+_bw_status() { bw status 2>/dev/null | jq -r '.status' 2>/dev/null || echo "unknown"; }
+_bw_save() { mkdir -p "$(dirname "$BW_SESSION_FILE")" && echo "$BW_SESSION" > "$BW_SESSION_FILE" && chmod 600 "$BW_SESSION_FILE"; }
+_bw_load() { [[ -f "$BW_SESSION_FILE" ]] || return 1; BW_SESSION=$(cat "$BW_SESSION_FILE"); export BW_SESSION; [[ "$(_bw_status)" == "unlocked" ]]; }
 
-# Get master password
-if [[ -f "$MASTER_FILE" ]]; then
-    BW_MASTER=$(cat "$MASTER_FILE")
-else
-    echo -n "Master password: "
-    read -rs BW_MASTER
-    echo
-fi
+command -v bw &>/dev/null || { echo "Error: bw not installed" >&2; return 1 2>/dev/null || exit 1; }
+_bw_load && { echo "Session restored"; return 0 2>/dev/null || exit 0; }
 
-# Unlock and export session
-BW_SESSION=$(bw unlock --raw "$BW_MASTER")
-if [[ -n "$BW_SESSION" ]]; then
-    export BW_SESSION
-    echo "Bitwarden unlocked"
-else
-    echo "Failed to unlock Bitwarden" >&2
-    return 1 2>/dev/null || exit 1
-fi
+case "$(_bw_status)" in
+    unlocked) echo "Already unlocked" ;;
+    locked) BW_SESSION=$(bw unlock --raw) && export BW_SESSION && _bw_save && echo "Unlocked" ;;
+    unauthenticated) bw login && BW_SESSION=$(bw unlock --raw) && export BW_SESSION && _bw_save && echo "Logged in" ;;
+    *) echo "Unknown status" >&2; return 1 2>/dev/null || exit 1 ;;
+esac
