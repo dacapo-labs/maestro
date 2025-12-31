@@ -34,6 +34,8 @@ session::metadata_init() {
   "outcome": null,
   "learnings": [],
   "skills_used": [],
+  "models_used": [],
+  "primary_model": null,
   "summary": null
 }
 EOF
@@ -275,6 +277,74 @@ session::get_skills() {
     else
         echo "[]"
     fi
+}
+
+# Track model usage in session
+# Usage: session::track_model <session_dir> <model_name>
+session::track_model() {
+    local session_dir="$1"
+    local model_name="$2"
+    local metadata_file="$session_dir/$SESSION_METADATA_FILE"
+
+    if [[ ! -f "$metadata_file" ]]; then
+        return 1
+    fi
+
+    if ! command -v jq &>/dev/null; then
+        return 1
+    fi
+
+    local now
+    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    local tmp_file
+    tmp_file=$(mktemp)
+
+    # Check if model already tracked, increment count or add new
+    # Also update primary_model to the most-used model
+    jq --arg model "$model_name" --arg now "$now" '
+        # Update or add model
+        if (.models_used | map(.model) | index($model)) then
+            .models_used |= map(
+                if .model == $model then
+                    .invocations += 1 | .last_used = $now
+                else
+                    .
+                end
+            )
+        else
+            .models_used += [{
+                "model": $model,
+                "invocations": 1,
+                "first_used": $now,
+                "last_used": $now
+            }]
+        end
+        # Set primary_model to most-used
+        | .primary_model = (.models_used | max_by(.invocations) | .model)
+    ' "$metadata_file" > "$tmp_file"
+
+    mv "$tmp_file" "$metadata_file"
+}
+
+# Get models used in session
+# Usage: session::get_models <session_dir>
+session::get_models() {
+    local session_dir="$1"
+    local metadata_file="$session_dir/$SESSION_METADATA_FILE"
+
+    if [[ -f "$metadata_file" ]] && command -v jq &>/dev/null; then
+        jq -r '.models_used // []' "$metadata_file"
+    else
+        echo "[]"
+    fi
+}
+
+# Get primary model for session
+# Usage: session::get_primary_model <session_dir>
+session::get_primary_model() {
+    local session_dir="$1"
+    session::metadata_get "$session_dir" "primary_model"
 }
 
 # Get session age in days

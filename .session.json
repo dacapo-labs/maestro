@@ -23,5 +23,20 @@
       "last_used": "2025-12-31T04:49:26Z"
     }
   ],
-  "summary": null
+  "summary": null,
+  "models_used": [
+    {
+      "model": "claude-opus-4-20250514",
+      "invocations": 2,
+      "first_used": "2025-12-31T04:58:59Z",
+      "last_used": "2025-12-31T04:59:03Z"
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "invocations": 1,
+      "first_used": "2025-12-31T04:59:01Z",
+      "last_used": "2025-12-31T04:59:01Z"
+    }
+  ],
+  "primary_model": "claude-opus-4-20250514"
 }

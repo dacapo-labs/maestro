@@ -135,8 +135,30 @@ case "$cmd" in
                     cli::out "  Skills used: $skills_count"
                     jq -r '.skills_used[] | "    - \(.name) (\(.invocations)x)"' .session.json 2>/dev/null
                 fi
+
+                # Show models used
+                models_count=$(jq -r '.models_used | length' .session.json 2>/dev/null || echo "0")
+                if [[ "$models_count" -gt 0 ]]; then
+                    primary=$(jq -r '.primary_model // "none"' .session.json)
+                    cli::out "  Models used: $models_count (primary: $primary)"
+                    jq -r '.models_used[] | "    - \(.model) (\(.invocations)x)"' .session.json 2>/dev/null
+                fi
             fi
         fi
+        ;;
+    track-model)
+        # Track model usage in current session
+        model_name="${1:-}"
+        if [[ -z "$model_name" ]]; then
+            cli::die_usage "Usage: session track-model <model-name>"
+        fi
+        if [[ ! -f ".session.json" ]]; then
+            cli::warn "No .session.json in current directory"
+            exit 0
+        fi
+        source "$MAESTRO_ROOT/sessions/schema.sh"
+        session::track_model "." "$model_name"
+        cli::out "Tracked model: $model_name"
         ;;
     track-skill)
         # Track skill usage in current session
@@ -194,6 +216,8 @@ case "$cmd" in
         cli::out "    compact              Archive CLAUDE.md"
         cli::out "    done                 Quick close without AI analysis"
         cli::out "    status               Show current status"
+        cli::out "    track-model <name>   Track model usage in session"
+        cli::out "    track-skill <name>   Track skill usage in session"
         cli::out "    migrate [--dry-run]  Add .session.json to existing sessions"
         cli::out ""
         cli::out "Aliases (claude-sessions compatible):"
