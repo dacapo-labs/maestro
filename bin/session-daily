@@ -1,0 +1,285 @@
+#!/usr/bin/env bash
+# session-daily - End-of-day session wrap-up
+# Usage: session-daily [--remind]
+
+set -euo pipefail
+
+MAESTRO_ROOT="${MAESTRO_ROOT:-${XDG_CONFIG_HOME:-$HOME/.config}/lifemaestro}"
+SESSIONS_BASE="${SESSIONS_BASE:-$HOME/ai-sessions}"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+log_info()  { echo -e "${BLUE}▶${NC} $*"; }
+log_ok()    { echo -e "${GREEN}✓${NC} $*"; }
+log_warn()  { echo -e "${YELLOW}!${NC} $*"; }
+log_error() { echo -e "${RED}✗${NC} $*" >&2; }
+
+usage() {
+    cat <<EOF
+session-daily - End-of-day session wrap-up
+
+Usage: session-daily [options]
+
+Options:
+    --remind        Just show reminder, don't run interactive wrap
+    --auto          Auto-process without prompts (closes all, syncs)
+    -h, --help      Show this help
+
+What it does:
+    1. Lists all active (unclosed) sessions
+    2. For each: prompts to close (generates SUMMARY.md)
+    3. Syncs all sessions to git backup
+    4. Shows daily summary
+
+Setup daily reminder:
+    # Add to crontab (5pm reminder)
+    0 17 * * * session-daily --remind | terminal-notifier -title "Session Wrap"
+    
+    # Or shell alias
+    alias eod='session-daily'
+EOF
+}
+
+# Find all active sessions
+find_active_sessions() {
+    if [[ ! -d "$SESSIONS_BASE" ]]; then
+        return
+    fi
+
+    find "$SESSIONS_BASE" -name ".session.json" -type f 2>/dev/null | while read -r metadata; do
+        if command -v jq &>/dev/null; then
+            status=$(jq -r '.status // "unknown"' "$metadata" 2>/dev/null)
+            if [[ "$status" == "active" ]]; then
+                dirname "$metadata"
+            fi
+        fi
+    done
+}
+
+# Get session info for display
+session_info() {
+    local session_dir="$1"
+    local metadata="$session_dir/.session.json"
+    
+    if [[ -f "$metadata" ]] && command -v jq &>/dev/null; then
+        local id=$(jq -r '.id // "unknown"' "$metadata")
+        local zone=$(jq -r '.zone // "?"' "$metadata")
+        local type=$(jq -r '.type // "?"' "$metadata")
+        local created=$(jq -r '.created // ""' "$metadata")
+        
+        # Calculate age
+        local age=""
+        if [[ -n "$created" ]]; then
+            local created_ts=$(date -d "$created" +%s 2>/dev/null || echo "0")
+            local now_ts=$(date +%s)
+            local age_hours=$(( (now_ts - created_ts) / 3600 ))
+            if [[ $age_hours -lt 24 ]]; then
+                age="${age_hours}h"
+            else
+                age="$((age_hours / 24))d"
+            fi
+        fi
+        
+        echo "$zone/$type: $id ($age old)"
+    else
+        basename "$session_dir"
+    fi
+}
+
+# Count sessions
+count_sessions() {
+    local count=0
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && ((count++))
+    done
+    echo "$count"
+}
+
+cmd_remind() {
+    local sessions
+    sessions=$(find_active_sessions)
+    local count=$(echo "$sessions" | count_sessions)
+    
+    if [[ $count -eq 0 ]]; then
+        echo "No active sessions. All wrapped up!"
+        exit 0
+    fi
+    
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  📋 End of Day: $count active session(s)${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    echo "$sessions" | while read -r session_dir; do
+        [[ -z "$session_dir" ]] && continue
+        echo -e "  • $(session_info "$session_dir")"
+    done
+    
+    echo ""
+    echo -e "${DIM}Run 'session-daily' to close and sync${NC}"
+}
+
+cmd_interactive() {
+    local sessions
+    sessions=$(find_active_sessions)
+    local count=$(echo "$sessions" | count_sessions)
+    
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  🌅 Daily Session Wrap-Up${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    if [[ $count -eq 0 ]]; then
+        log_ok "No active sessions. All wrapped up!"
+        echo ""
+    else
+        log_info "Found $count active session(s):"
+        echo ""
+        
+        echo "$sessions" | while read -r session_dir; do
+            [[ -z "$session_dir" ]] && continue
+            echo -e "  ${BLUE}→${NC} $(session_info "$session_dir")"
+            echo -e "    ${DIM}$session_dir${NC}"
+        done
+        
+        echo ""
+        echo -e "${YELLOW}To close sessions with AI summary generation:${NC}"
+        echo "  1. cd into each session directory"
+        echo "  2. Run: session close (inside Claude Code)"
+        echo ""
+        echo "Or close quickly without AI:"
+        echo "  session done (in each directory)"
+        echo ""
+        
+        read -p "Open first session for closing? [y/N] " confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+            first_session=$(echo "$sessions" | head -1)
+            if [[ -n "$first_session" ]]; then
+                echo ""
+                log_info "Opening: $first_session"
+                echo "Run 'session close' inside Claude Code to generate summary"
+                cd "$first_session"
+                exec $SHELL
+            fi
+        fi
+    fi
+    
+    # Sync to git
+    echo ""
+    read -p "Sync sessions to git backup? [Y/n] " sync_confirm
+    if [[ "$sync_confirm" != "n" && "$sync_confirm" != "N" ]]; then
+        if [[ -x "$MAESTRO_ROOT/../bin/sessions-sync" ]]; then
+            "$MAESTRO_ROOT/../bin/sessions-sync" push
+        elif command -v sessions-sync &>/dev/null; then
+            sessions-sync push
+        else
+            log_warn "sessions-sync not found"
+        fi
+    fi
+    
+    echo ""
+    log_ok "Daily wrap complete!"
+}
+
+cmd_auto() {
+    log_info "Auto-closing all active sessions..."
+    
+    local sessions
+    sessions=$(find_active_sessions)
+    
+    echo "$sessions" | while read -r session_dir; do
+        [[ -z "$session_dir" ]] && continue
+        log_info "Closing: $(session_info "$session_dir")"
+        
+        cd "$session_dir"
+        
+        # Quick close without AI
+        if [[ -f ".session.json" ]] && command -v jq &>/dev/null; then
+            local now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            jq --arg now "$now" '.status = "closed" | .closed = $now | .outcome = "auto-closed"' \
+                .session.json > .session.json.tmp && mv .session.json.tmp .session.json
+        fi
+    done
+    
+    # Sync
+    if command -v sessions-sync &>/dev/null; then
+        sessions-sync push
+    fi
+    
+    log_ok "Auto-wrap complete"
+}
+
+# Main
+case "${1:-}" in
+    --setup-reminder|setup)
+        cmd_setup_reminder
+        ;;
+    --remind|-r)
+        cmd_remind
+        ;;
+    --auto|-a)
+        cmd_auto
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    *)
+        cmd_interactive
+        ;;
+esac
+
+cmd_setup_reminder() {
+    echo -e "${BOLD}Setup Daily Reminder${NC}"
+    echo ""
+    echo "Options:"
+    echo "  1. Cron job (5pm daily)"
+    echo "  2. Shell alias (manual)"
+    echo "  3. Skip"
+    echo ""
+    read -p "Choose [1/2/3]: " choice
+    
+    case "$choice" in
+        1)
+            # Cron setup
+            local script_path=$(realpath "$0")
+            local cron_line="0 17 * * * $script_path --remind"
+            
+            # Check if already exists
+            if crontab -l 2>/dev/null | grep -q "session-daily"; then
+                log_warn "Cron entry already exists"
+                crontab -l | grep "session-daily"
+                return
+            fi
+            
+            # Add to crontab
+            (crontab -l 2>/dev/null; echo "$cron_line") | crontab -
+            log_ok "Added cron job: $cron_line"
+            echo ""
+            echo "You'll get a reminder at 5pm daily."
+            echo "View with: crontab -l"
+            ;;
+        2)
+            echo ""
+            echo "Add this to your ~/.bashrc or ~/.zshrc:"
+            echo ""
+            echo "  alias eod='session-daily'"
+            echo "  alias wrap='session-daily'"
+            echo ""
+            echo "Then run 'eod' or 'wrap' at end of day."
+            ;;
+        3)
+            echo "Skipped."
+            ;;
+        *)
+            log_error "Invalid choice"
+            ;;
+    esac
+}

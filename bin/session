@@ -199,6 +199,14 @@ case "$cmd" in
     migrate)
         "$MAESTRO_ROOT/.claude/skills/session-manager/scripts/session-migrate.sh" "$@"
         ;;
+    daily|wrap|eod)
+        # End-of-day session wrap-up
+        exec "$MAESTRO_ROOT/../bin/session-daily" "$@"
+        ;;
+    sync)
+        # Sync sessions to git
+        exec "$MAESTRO_ROOT/../bin/sessions-sync" "$@"
+        ;;
 
     # ============================================
     # HELP
@@ -242,6 +250,10 @@ case "$cmd" in
         cli::out "    track-model <name>   Track model usage in session"
         cli::out "    track-skill <name>   Track skill usage in session"
         cli::out "    migrate [--dry-run]  Add .session.json to existing sessions"
+        cli::out ""
+        cli::out "Daily workflow:"
+        cli::out "    daily                End-of-day wrap (close sessions, sync)"
+        cli::out "    sync                 Sync sessions to git backup"
         cli::out ""
         cli::out "Aliases (claude-sessions compatible):"
         cli::out "    cc, ccticket, ccw, cch, ccinfra, cclearn, ccls, ccgo"

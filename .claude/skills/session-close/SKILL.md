@@ -163,11 +163,66 @@ For `--quick` flag, skip confirmation and use AI suggestions directly:
 - **No AI context**: "Session close requires Claude Code for AI analysis. Run inside Claude Code."
 - **Already closed**: "Session already closed on {date}. Reopen? (yes/no)"
 
+### Step 8: Generate SUMMARY.md
+
+Generate a session summary from the transcript (if available) or from CLAUDE.md:
+
+```bash
+# Check for transcript
+latest_transcript=$(ls -t transcripts/*.log 2>/dev/null | head -1)
+```
+
+If transcript exists, read it and generate SUMMARY.md with these sections:
+
+```markdown
+# Session Summary
+
+**Date:** 2024-12-30
+**Duration:** ~2 hours
+**Outcome:** success
+
+## What Was Accomplished
+- Fixed race condition in user profile component
+- Added proper cleanup to useEffect hook
+- Wrote tests for the fix
+
+## Key Decisions
+- Chose to use AbortController over manual flag
+- Decided against adding loading state (not needed)
+
+## Files Modified
+- src/components/UserProfile.tsx
+- src/components/__tests__/UserProfile.test.tsx
+
+## Problems & Solutions
+- **Problem:** State update on unmounted component
+- **Solution:** Return cleanup function from useEffect
+
+## Learnings
+- Always return cleanup function from useEffect with async operations
+- AbortController is cleaner than manual boolean flags
+
+## Next Steps
+- Monitor for similar patterns in other components
+- Consider adding ESLint rule for this
+```
+
+Write SUMMARY.md:
+```bash
+cat > SUMMARY.md << 'EOF'
+{generated content}
+EOF
+```
+
+**Important:** SUMMARY.md is safe to commit (no secrets) because it's AI-generated summary, not raw transcript.
+
 ## Files Modified
 
 - `.session.json` - Updated with category, tags, outcome, summary, learnings, closed timestamp
+- `SUMMARY.md` - AI-generated session summary (safe for git)
 - `CLAUDE.md` - Optional: "Session closed" marker appended
 - `.claude-archives/` - Optional: Archived CLAUDE.md copy
+- `transcripts/` - Stays local (gitignored, may contain secrets)
 
 ## References
 
