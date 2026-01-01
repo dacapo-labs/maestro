@@ -8,10 +8,12 @@
 # 1. Detects/creates session context
 # 2. Logs the full conversation transcript
 # 3. Tracks client usage in .session.json
+# 4. Optionally routes through baton for fanout/routing
 
 set -euo pipefail
 
 MAESTRO_ROOT="${MAESTRO_ROOT:-${XDG_CONFIG_HOME:-$HOME/.config}/lifemaestro}"
+BATON_URL="${BATON_URL:-http://127.0.0.1:4000}"
 
 # Colors
 RED='\033[0;31m'
@@ -58,9 +60,9 @@ declare -A CLIENT_PROVIDERS=(
 
 usage() {
     cat <<EOF
-ai - Multi-client AI session launcher
+ai - Multi-client AI session launcher with baton integration
 
-Usage: ai <client> [--via <method>] [client-args...]
+Usage: ai <client> [--via <method>] [--fanout <mode>] [--models <list>] [client-args...]
 
 Clients:
     claude      Claude Code (Anthropic)
@@ -69,14 +71,29 @@ Clients:
     aider       Aider (multi-model)
 
 Options:
-    --via <method>  Access method: oauth, api, bedrock, vertex, azure
-                    (See 'ai-access status' for available methods)
+    --via <method>      Access method: oauth, api, bedrock, vertex, azure
+                        (See 'ai-access status' for available methods)
+    --fanout <mode>     Use baton fanout: first, all, race, vote, judge
+    --models <list>     Comma-separated model list for fanout
+    --route             Use baton adaptive routing to pick best model
+    --baton             Force using baton proxy (even for single model)
 
 Features:
     - Automatic transcript logging to transcripts/
     - Client usage tracking in .session.json
     - Shared context via CONTEXT.md symlinks
     - Clean auth switching between OAuth/API/Cloud
+    - Baton integration for fanout and adaptive routing
+
+Baton Features:
+    ai claude --fanout race --models "claude-3-5-sonnet,gpt-4o,gemini-1.5-pro"
+        Race multiple models, return fastest
+
+    ai claude --fanout judge --models "claude-3-5-sonnet,gpt-4o"
+        Query multiple models, use judge to pick best
+
+    ai claude --route
+        Use baton's adaptive routing based on query type
 
 Examples:
     ai claude                    # Start Claude with default access (oauth)
@@ -92,6 +109,7 @@ Access Methods:
 
 Environment:
     MAESTRO_ROOT    Config directory (default: ~/.config/lifemaestro)
+    BATON_URL       Baton server URL (default: http://127.0.0.1:4000)
     AI_NO_LOG       Set to 1 to disable transcript logging
 
 See also:
@@ -103,6 +121,66 @@ EOF
 # Check if a command exists
 command_exists() {
     command -v "$1" &>/dev/null
+}
+
+# Check if baton is available
+baton_available() {
+    curl -sf "${BATON_URL}/healthz" >/dev/null 2>&1
+}
+
+# Get best model from baton router
+baton_get_best_model() {
+    local query_type="${1:-code}"
+    local available_models="${2:-}"
+    local fallback="${3:-claude-sonnet-4-20250514}"
+
+    local url="${BATON_URL}/router/best?query_type=${query_type}"
+    [[ -n "$available_models" ]] && url="${url}&models=${available_models}"
+    [[ -n "$fallback" ]] && url="${url}&fallback=${fallback}"
+
+    local response
+    response=$(curl -sf "$url" 2>/dev/null) || return 1
+
+    echo "$response" | jq -r '.best_model // empty'
+}
+
+# Get suggested models for fanout
+baton_suggest_models() {
+    local query_type="${1:-code}"
+    local top_n="${2:-3}"
+
+    local response
+    response=$(curl -sf "${BATON_URL}/router/suggest?query_type=${query_type}&top_n=${top_n}" 2>/dev/null) || return 1
+
+    echo "$response" | jq -r '.suggested_models | join(",")'
+}
+
+# Check rate limits before request
+baton_check_rate_limit() {
+    local auth_key="$1"
+    local estimated_tokens="${2:-1000}"
+
+    local response
+    response=$(curl -sf -X POST "${BATON_URL}/rate-limits/check" \
+        -H "Content-Type: application/json" \
+        -d "{\"auth_key\": \"${auth_key}\", \"estimated_tokens\": ${estimated_tokens}}" 2>/dev/null) || return 1
+
+    local allowed
+    allowed=$(echo "$response" | jq -r '.allowed')
+
+    if [[ "$allowed" == "true" ]]; then
+        return 0
+    else
+        local reason
+        reason=$(echo "$response" | jq -r '.reason // "Rate limit exceeded"')
+        log_warn "Rate limit: $reason"
+        return 1
+    fi
+}
+
+# Get routing stats
+baton_routing_stats() {
+    curl -sf "${BATON_URL}/router/stats" 2>/dev/null | jq -r '.stats.win_rates | to_entries | .[] | "\(.key): \(.value | to_entries | map("\(.key)=\(.value)") | join(", "))"' 2>/dev/null
 }
 
 # Track client usage in .session.json
@@ -196,6 +274,45 @@ setup_access_env() {
     log_info "Access: $provider via ${method:-default}"
 }
 
+# Setup baton proxy environment
+setup_baton_proxy() {
+    # Set OPENAI_BASE_URL to route through baton
+    export OPENAI_BASE_URL="${BATON_URL}/v1"
+    export OPENAI_API_BASE="${BATON_URL}/v1"
+
+    # For litellm-compatible clients
+    export LITELLM_PROXY_URL="${BATON_URL}"
+
+    log_info "Proxy: Routing through baton at ${BATON_URL}"
+}
+
+# Show baton status
+show_baton_status() {
+    if ! baton_available; then
+        log_warn "Baton not available at ${BATON_URL}"
+        return 1
+    fi
+
+    echo -e "\n${BLUE}Baton Status:${NC}"
+
+    # Show routing stats if available
+    local stats
+    stats=$(baton_routing_stats 2>/dev/null)
+    if [[ -n "$stats" ]]; then
+        echo -e "${DIM}Routing stats:${NC}"
+        echo "$stats" | sed 's/^/  /'
+    fi
+
+    # Show rate limit status
+    local rate_status
+    rate_status=$(curl -sf "${BATON_URL}/rate-limits" 2>/dev/null | jq -r '.statuses | keys | join(", ")' 2>/dev/null)
+    if [[ -n "$rate_status" ]]; then
+        echo -e "${DIM}Rate limited:${NC} $rate_status"
+    fi
+
+    echo ""
+}
+
 # Main
 main() {
     local client="${1:-}"
@@ -207,6 +324,12 @@ main() {
         exit 0
     fi
 
+    # Handle special commands
+    if [[ "$client" == "status" ]]; then
+        show_baton_status
+        exit 0
+    fi
+
     # Validate client
     if [[ -z "${CLIENT_COMMANDS[$client]:-}" ]]; then
         log_error "Unknown client: $client"
@@ -214,14 +337,35 @@ main() {
         exit 1
     fi
 
-    # Parse --via flag
+    # Parse flags
     local via_method=""
+    local fanout_mode=""
+    local fanout_models=""
+    local use_routing=false
+    local use_baton=false
     local client_args=()
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --via)
                 via_method="${2:-}"
                 shift 2 || { log_error "--via requires a method"; exit 1; }
+                ;;
+            --fanout)
+                fanout_mode="${2:-}"
+                shift 2 || { log_error "--fanout requires a mode"; exit 1; }
+                ;;
+            --models)
+                fanout_models="${2:-}"
+                shift 2 || { log_error "--models requires a list"; exit 1; }
+                ;;
+            --route)
+                use_routing=true
+                shift
+                ;;
+            --baton)
+                use_baton=true
+                shift
                 ;;
             *)
                 client_args+=("$1")
@@ -237,6 +381,33 @@ main() {
 
     # Setup access environment (clears conflicting auth, sets correct method)
     setup_access_env "$provider" "$via_method"
+
+    # Setup baton if requested or using fanout/routing
+    if [[ "$use_baton" == "true" ]] || [[ -n "$fanout_mode" ]] || [[ "$use_routing" == "true" ]]; then
+        if baton_available; then
+            setup_baton_proxy
+
+            # If using adaptive routing, get best model
+            if [[ "$use_routing" == "true" ]]; then
+                local best_model
+                best_model=$(baton_get_best_model "code" "" "claude-sonnet-4-20250514")
+                if [[ -n "$best_model" ]]; then
+                    log_info "Router selected: $best_model"
+                    # For aider, pass model as arg
+                    if [[ "$client" == "aider" ]]; then
+                        client_args+=("--model" "$best_model")
+                    fi
+                fi
+            fi
+
+            # Check rate limits
+            if [[ -n "$provider" ]]; then
+                baton_check_rate_limit "${provider}/oauth" 1000 || log_warn "Proceeding despite rate limit warning"
+            fi
+        else
+            log_warn "Baton not available, falling back to direct access"
+        fi
+    fi
 
     # Check if client command exists
     if ! command_exists "$cmd"; then
@@ -268,7 +439,7 @@ main() {
         full_cmd="$cmd $context_flags"
     fi
 
-    # Add user's additional args (after parsing --via)
+    # Add user's additional args (after parsing our flags)
     if [[ ${#client_args[@]} -gt 0 ]]; then
         full_cmd="$full_cmd ${client_args[*]}"
     fi
